@@ -1,4 +1,4 @@
-# 📊 Trader Ad-Hoc Analytics Sandbox
+# 📊 Ad-Hoc Analytics Sandbox
 
 [![GitHub Pages](https://img.shields.io/badge/Deploy-GitHub_Pages-blue?style=flat-square&logo=github)](https://erdcpatel.github.io/perspective/)
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)

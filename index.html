@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Enable Cross-Origin Isolation for WebAssembly multithreading on static hosts like GitHub Pages -->
+    <script src="coi-serviceworker.js"></script>
+    <title>Trader Ad-Hoc Analytics Sandbox</title>
+
+    <link rel="preload" href="https://cdn.jsdelivr.net/npm/@finos/perspective@3.4.3/dist/wasm/perspective-server.wasm"
+        as="fetch" type="application/wasm" crossorigin="anonymous" />
+    <link rel="preload"
+        href="https://cdn.jsdelivr.net/npm/@finos/perspective-viewer@3.4.3/dist/wasm/perspective-viewer.wasm" as="fetch"
+        type="application/wasm" crossorigin="anonymous" />
+    <link rel="stylesheet" crossorigin="anonymous"
+        href="https://cdn.jsdelivr.net/npm/@finos/perspective-viewer@3.4.3/dist/css/themes.css" />
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: #111111;
+            color: #e0e0e0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            overflow: hidden;
+        }
+
+        #app-wrapper {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #drop-zone {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            margin: 24px;
+            border: 3px dashed #333333;
+            border-radius: 12px;
+            background-color: #161616;
+            transition: all 0.25s ease-in-out;
+            cursor: pointer;
+        }
+
+        #drop-zone.dragover {
+            border-color: #007acc;
+            background-color: #1a2332;
+        }
+
+        .icon-container {
+            font-size: 64px;
+            margin-bottom: 16px;
+            color: #007acc;
+        }
+
+        h2 {
+            margin: 0 0 12px 0;
+            font-weight: 500;
+            color: #ffffff;
+            font-size: 22px;
+        }
+
+        p {
+            margin: 0 0 24px 0;
+            font-size: 14px;
+            color: #888888;
+            text-align: center;
+            max-width: 480px;
+            line-height: 1.5;
+        }
+
+        .browse-btn {
+            background-color: #007acc;
+            color: #ffffff;
+            border: none;
+            padding: 12px 24px;
+            font-size: 14px;
+            font-weight: 600;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        #viewer-container {
+            display: none;
+            width: 100%;
+            height: 100%;
+            flex-direction: column;
+            position: relative;
+        }
+
+        #viewer-viewport {
+            flex: 1;
+            position: relative;
+            width: 100%;
+            background-color: #111111;
+        }
+
+        perspective-viewer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .info-badge {
+            margin-top: 16px;
+            background-color: #222222;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            color: #00ff87;
+            border: 1px solid #333;
+        }
+
+        #status-message {
+            font-size: 14px;
+            color: #007acc;
+            margin-top: 10px;
+            font-weight: bold;
+        }
+
+        /* App Header Styles */
+        #app-header {
+            height: 48px;
+            background-color: #161616;
+            border-bottom: 1px solid #2a2a2a;
+            display: none; /* Controlled dynamically in JS */
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 16px;
+            flex-shrink: 0;
+            user-select: none;
+        }
+
+        .header-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #ffffff;
+            letter-spacing: 0.5px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .panel-btn {
+            background-color: rgba(255, 255, 255, 0.05);
+            color: #e0e0e0;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            padding: 6px 12px;
+            font-size: 11px;
+            font-weight: 500;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            height: 28px;
+        }
+
+        .panel-btn:hover {
+            background-color: rgba(255, 255, 255, 0.12);
+            color: #ffffff;
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .panel-btn.primary {
+            background-color: #007acc;
+            color: #ffffff;
+            border-color: transparent;
+        }
+
+        .panel-btn.primary:hover {
+            background-color: #0098ff;
+        }
+
+        .panel-btn:disabled {
+            opacity: 0.35;
+            cursor: not-allowed;
+        }
+
+        .panel-btn.success {
+            background-color: #00ff87 !important;
+            color: #111111 !important;
+            border-color: transparent !important;
+        }
+
+        .panel-btn.danger {
+            background-color: rgba(255, 74, 74, 0.1) !important;
+            color: #ff4a4a !important;
+            border-color: rgba(255, 74, 74, 0.2) !important;
+        }
+
+        .panel-btn.danger:hover {
+            background-color: #ff4a4a !important;
+            color: #ffffff !important;
+            border-color: transparent !important;
+        }
+
+        .panel-group-container {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+            padding-right: 12px;
+        }
+
+        .panel-group-container:last-child {
+            border-right: none;
+            padding-right: 0;
+        }
+
+        .panel-select {
+            background-color: rgba(255, 255, 255, 0.05);
+            color: #e0e0e0;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            padding: 0 10px;
+            font-size: 11px;
+            font-weight: 500;
+            border-radius: 4px;
+            cursor: pointer;
+            height: 28px;
+            outline: none;
+            transition: all 0.15s ease;
+        }
+
+        .panel-select:hover {
+            background-color: rgba(255, 255, 255, 0.12);
+            color: #ffffff;
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .panel-select.success {
+            background-color: #00ff87 !important;
+            color: #111111 !important;
+            border-color: transparent !important;
+        }
+
+        .panel-select option {
+            background-color: #161616;
+            color: #e0e0e0;
+        }
+
+        /* Features & Purpose Grid */
+        #features-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+            max-width: 650px;
+            margin-top: 36px;
+            text-align: left;
+            width: 90%;
+        }
+
+        .feature-card {
+            background-color: #1a1a1a;
+            border: 1px solid #2a2a2a;
+            border-radius: 8px;
+            padding: 16px;
+            display: flex;
+            gap: 14px;
+            align-items: flex-start;
+            transition: all 0.22s ease-in-out;
+        }
+
+        .feature-card:hover {
+            border-color: #007acc;
+            background-color: #1f1f1f;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .feature-icon {
+            font-size: 22px;
+            padding: 6px;
+            background-color: rgba(255, 255, 255, 0.03);
+            border-radius: 6px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            line-height: 1;
+        }
+
+        .feature-info {
+            flex: 1;
+        }
+
+        .feature-info h3 {
+            margin: 0 0 6px 0;
+            font-size: 13px;
+            font-weight: 600;
+            color: #ffffff;
+        }
+
+        .feature-info p {
+            margin: 0 !important;
+            font-size: 11px !important;
+            color: #8a8a8a !important;
+            line-height: 1.45 !important;
+            text-align: left !important;
+            max-width: 100% !important;
+        }
+    </style>
+
+    <script type="module"
+        src="https://cdn.jsdelivr.net/npm/@finos/perspective-viewer@3.4.3/dist/cdn/perspective-viewer.js"></script>
+    <script type="module"
+        src="https://cdn.jsdelivr.net/npm/@finos/perspective-viewer-datagrid@3.4.3/dist/cdn/perspective-viewer-datagrid.js"></script>
+    <script type="module"
+        src="https://cdn.jsdelivr.net/npm/@finos/perspective-viewer-d3fc@3.4.3/dist/cdn/perspective-viewer-d3fc.js"></script>
+</head>
+
+<body>
+
+    <div id="app-wrapper">
+        <div id="drop-zone">
+            <div class="icon-container">📊</div>
+            <h2>Ad-Hoc Analytics Canvas</h2>
+            <p>Drag & drop any heavy local CSV file to instantly unlock slice-and-dice interactive grids, pivots, and
+                cross-filter data metrics.</p>
+            <input type="file" id="file-picker" accept=".csv" style="display: none;" />
+            <button class="browse-btn" id="browse-btn">Select CSV File</button>
+            <div id="status-message"></div>
+            <div id="progress-container"
+                style="display: none; width: 80%; max-width: 400px; background-color: #222; border-radius: 6px; height: 8px; margin-top: 16px; overflow: hidden; border: 1px solid #333;">
+                <div id="progress-bar"
+                    style="width: 0%; height: 100%; background-color: #007acc; transition: width 0.1s ease-in-out;">
+                </div>
+            </div>
+
+            <!-- Features & Purpose Grid -->
+            <div id="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">🚀</div>
+                    <div class="feature-info">
+                        <h3>Memory-Safe Streaming</h3>
+                        <p>Reads massive local CSV files (no size limit, tested up to 2GB+) in streaming chunks. High-efficiency memory recycling keeps browser RAM footprint low and prevents crashes.</p>
+                    </div>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">💾</div>
+                    <div class="feature-info">
+                        <h3>Layout Persistence</h3>
+                        <p>Configure complex grid splits, row groupings, numeric filters, or active charts once. Instantly save configurations to browser LocalStorage or export layouts as portable JSON files.</p>
+                    </div>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔒</div>
+                    <div class="feature-info">
+                        <h3>100% Client-Side Privacy</h3>
+                        <p>Complete data privacy. All parsing and aggregation are executed strictly inside your local WebAssembly compiler sandbox. No data leaves your machine or goes to any server.</p>
+                    </div>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">⚡</div>
+                    <div class="feature-info">
+                        <h3>Native Multithreading</h3>
+                        <p>Powered by C++ compiled to WebAssembly. Instantly filter, search, pivot, and render millions of rows in milliseconds using multi-threaded worker thread pools.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="info-badge">🔒 Pure Browser Session: Zero Client Data Transmitted to Server Context</div>
+        </div>
+
+        <div id="viewer-container">
+            <header id="app-header">
+                <div class="header-title">
+                    <span>📊</span> Ad-Hoc Analytics Canvas
+                </div>
+                <div class="header-actions">
+                    <!-- New File Reset -->
+                    <button class="panel-btn primary" id="new-file-btn">📂 New File</button>
+
+                    <!-- Multi-Layout selector -->
+                    <div class="panel-group-container">
+                        <select class="panel-select" id="layout-select">
+                            <option value="" disabled selected>Load Saved Layout...</option>
+                        </select>
+                        <button class="panel-btn" id="save-layout-btn" title="Save current layout snapshot">💾 Save View</button>
+                        <button class="panel-btn danger" id="delete-layout-btn" title="Delete current selected layout" disabled>🗑️</button>
+                    </div>
+
+                    <!-- JSON Layout Export/Import -->
+                    <div class="panel-group-container">
+                        <button class="panel-btn" id="export-layout-btn" title="Export layout to JSON file">📤 Export Layout</button>
+                        <button class="panel-btn" id="import-layout-btn" title="Import layout from JSON file">📥 Import Layout</button>
+                        <input type="file" id="layout-picker" accept=".json" style="display: none;" />
+                    </div>
+
+                    <!-- Data & Chart Utilities -->
+                    <div class="panel-group-container">
+                        <button class="panel-btn success" id="export-data-btn" title="Export active filtered data as CSV">📥 Export Data</button>
+                        <button class="panel-btn primary" id="capture-chart-btn" title="Take PNG snapshot of active chart">📸 Save Chart</button>
+                    </div>
+                </div>
+            </header>
+            <div id="viewer-viewport">
+                <perspective-viewer id="viewer" theme="Pro Dark"></perspective-viewer>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import perspective from "https://cdn.jsdelivr.net/npm/@finos/perspective@3.4.3/dist/cdn/perspective.js";
+
+        const dropZone = document.getElementById('drop-zone');
+        const filePicker = document.getElementById('file-picker');
+        const browseBtn = document.getElementById('browse-btn');
+        const viewerContainer = document.getElementById('viewer-container');
+        const viewer = document.getElementById('viewer');
+        const statusMsg = document.getElementById('status-message');
+        const progressContainer = document.getElementById('progress-container');
+        const progressBar = document.getElementById('progress-bar');
+
+        // Header & Control Elements
+        const appHeader = document.getElementById('app-header');
+        const newFileBtn = document.getElementById('new-file-btn');
+        const layoutSelect = document.getElementById('layout-select');
+        const saveLayoutBtn = document.getElementById('save-layout-btn');
+        const deleteLayoutBtn = document.getElementById('delete-layout-btn');
+        const exportLayoutBtn = document.getElementById('export-layout-btn');
+        const importLayoutBtn = document.getElementById('import-layout-btn');
+        const layoutPicker = document.getElementById('layout-picker');
+        const exportDataBtn = document.getElementById('export-data-btn');
+        const captureChartBtn = document.getElementById('capture-chart-btn');
+
+        // Module Global Variables
+        let activeWorker = null;
+        let activeTable = null;
+
+        const STORAGE_KEY = 'perspective_workspace_layouts';
+
+        browseBtn.addEventListener('click', (e) => { e.stopPropagation(); filePicker.click(); });
+        filePicker.addEventListener('change', async (e) => { if (e.target.files.length > 0) await processCSV(e.target.files[0]); });
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+        dropZone.addEventListener('dragleave', () => { dropZone.classList.remove('dragover'); });
+        dropZone.addEventListener('drop', async (e) => { e.preventDefault(); dropZone.classList.remove('dragover'); if (e.dataTransfer.files.length > 0) await processCSV(e.dataTransfer.files[0]); });
+
+        function getSavedLayouts() {
+            try {
+                return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+            } catch (e) {
+                return {};
+            }
+        }
+
+        function saveSavedLayouts(layouts) {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(layouts));
+        }
+
+        function updateLayoutSelectDropdown() {
+            const layouts = getSavedLayouts();
+            layoutSelect.innerHTML = '<option value="" disabled selected>Load Saved Layout...</option>';
+            
+            Object.keys(layouts).sort().forEach(name => {
+                const option = document.createElement('option');
+                option.value = name;
+                option.textContent = name;
+                layoutSelect.appendChild(option);
+            });
+            
+            deleteLayoutBtn.disabled = true;
+        }
+
+        // Swaps button text/style temporarily for instant interactive action feedback
+        function flashButtonSuccess(btn, successHTML) {
+            const originalHTML = btn.innerHTML;
+            btn.innerHTML = successHTML;
+            btn.classList.add('success');
+            const wasDisabled = btn.disabled;
+            btn.disabled = true;
+            setTimeout(() => {
+                btn.innerHTML = originalHTML;
+                btn.classList.remove('success');
+                btn.disabled = wasDisabled;
+            }, 1500);
+        }
+
+        // Layout Persistence Events
+        saveLayoutBtn.addEventListener('click', async () => {
+            const layoutName = prompt("Enter a name for this workspace layout:");
+            if (!layoutName) return;
+            const cleanedName = layoutName.trim();
+            if (!cleanedName) return;
+
+            try {
+                const layout = await viewer.save();
+                const layouts = getSavedLayouts();
+                layouts[cleanedName] = layout;
+                saveSavedLayouts(layouts);
+                
+                updateLayoutSelectDropdown();
+                layoutSelect.value = cleanedName;
+                deleteLayoutBtn.disabled = false;
+                flashButtonSuccess(saveLayoutBtn, "✅ Saved!");
+            } catch (e) {
+                console.error("Failed to save layout:", e);
+                alert("Error saving layout state.");
+            }
+        });
+
+        layoutSelect.addEventListener('change', async (e) => {
+            const selectedName = e.target.value;
+            if (!selectedName) return;
+
+            try {
+                const layouts = getSavedLayouts();
+                const layout = layouts[selectedName];
+                if (layout) {
+                    await viewer.restore(layout);
+                    deleteLayoutBtn.disabled = false;
+                    layoutSelect.classList.add('success');
+                    setTimeout(() => layoutSelect.classList.remove('success'), 1200);
+                }
+            } catch (err) {
+                console.error("Failed to restore layout:", err);
+                alert("Error restoring layout state. Make sure it matches the current file schema.");
+            }
+        });
+
+        deleteLayoutBtn.addEventListener('click', () => {
+            const selectedName = layoutSelect.value;
+            if (!selectedName) return;
+
+            if (confirm(`Are you sure you want to delete the layout "${selectedName}"?`)) {
+                const layouts = getSavedLayouts();
+                delete layouts[selectedName];
+                saveSavedLayouts(layouts);
+                
+                updateLayoutSelectDropdown();
+                flashButtonSuccess(deleteLayoutBtn, "🗑️ Deleted!");
+            }
+        });
+
+        exportLayoutBtn.addEventListener('click', async () => {
+            try {
+                const layout = await viewer.save();
+                const blob = new Blob([JSON.stringify(layout, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `perspective-layout-${new Date().toISOString().slice(0, 10)}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                flashButtonSuccess(exportLayoutBtn, "✅ Exported!");
+            } catch (e) {
+                console.error("Failed to export layout:", e);
+                alert("Error exporting layout.");
+            }
+        });
+
+        importLayoutBtn.addEventListener('click', () => layoutPicker.click());
+        layoutPicker.addEventListener('change', async (e) => {
+            if (e.target.files.length > 0) {
+                try {
+                    const text = await e.target.files[0].text();
+                    const layout = JSON.parse(text);
+                    await viewer.restore(layout);
+                    flashButtonSuccess(importLayoutBtn, "✅ Imported!");
+                } catch (err) {
+                    console.error("Failed to import layout:", err);
+                    alert("Invalid layout file format or configuration error.");
+                }
+                layoutPicker.value = "";
+            }
+        });
+
+        // Reset to Drop Zone Event
+        newFileBtn.addEventListener('click', async () => {
+            try {
+                if (activeTable) {
+                    await activeTable.delete();
+                    activeTable = null;
+                }
+                if (activeWorker) {
+                    await activeWorker.terminate();
+                    activeWorker = null;
+                }
+            } catch (err) {
+                console.error("Error during cleanup:", err);
+            }
+            try {
+                await viewer.clear();
+            } catch (err) { }
+
+            appHeader.style.display = 'none';
+            viewerContainer.style.display = 'none';
+            dropZone.style.display = 'flex';
+            statusMsg.innerText = "";
+            progressContainer.style.display = 'none';
+            progressBar.style.width = '0%';
+            filePicker.value = "";
+            layoutSelect.selectedIndex = 0;
+            deleteLayoutBtn.disabled = true;
+        });
+
+        // Filtered Clean CSV Export Event
+        exportDataBtn.addEventListener('click', async () => {
+            try {
+                statusMsg.style.display = 'block';
+                statusMsg.innerText = "Querying filtered data view...";
+                
+                const view = await viewer.getView();
+                if (!view) {
+                    alert("No active data view found.");
+                    statusMsg.innerText = "";
+                    return;
+                }
+                
+                statusMsg.innerText = "Formatting dataset to CSV text...";
+                const csvData = await view.to_csv();
+                
+                statusMsg.innerText = "Downloading CSV...";
+                const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `analytics_export_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                statusMsg.innerText = "";
+                flashButtonSuccess(exportDataBtn, "📥 Exported!");
+            } catch (err) {
+                console.error("Failed to export data:", err);
+                alert("Failed to export filtered CSV data.");
+                statusMsg.innerText = "";
+            }
+        });
+
+        // Helper to recursively collect all visible CANVAS, SVG, text-bearing HTML elements, and swatches
+        function collectRenderables(root, list = []) {
+            if (!root) return list;
+            
+            const tag = root.tagName;
+            if (tag === 'STYLE' || tag === 'SCRIPT' || tag === 'TEMPLATE') return list;
+            
+            if (root instanceof HTMLElement || root instanceof SVGElement) {
+                const rect = root.getBoundingClientRect();
+                if (rect.width === 0 || rect.height === 0) {
+                    return list; // Skip invisible elements and their subtrees
+                }
+                
+                // Canvas and SVG elements are captured directly
+                if (tag === 'CANVAS' || tag === 'svg' || tag === 'SVG') {
+                    list.push(root);
+                    if (tag === 'svg' || tag === 'SVG') {
+                        return list; // Don't recurse into SVG children, SVG rendering handles it all
+                    }
+                } else {
+                    const style = window.getComputedStyle(root);
+                    if (style.display !== 'none' && style.visibility !== 'hidden' && parseFloat(style.opacity) !== 0) {
+                        // Extract direct text content
+                        const directText = Array.from(root.childNodes)
+                            .filter(node => node.nodeType === Node.TEXT_NODE)
+                            .map(node => node.textContent.trim())
+                            .join("");
+                        
+                        const hasText = directText.length > 0;
+                        const bgColor = style.backgroundColor;
+                        const hasBg = bgColor && bgColor !== 'transparent' && bgColor !== 'rgba(0, 0, 0, 0)';
+                        
+                        if (hasText || (hasBg && rect.width < 100 && rect.height < 100)) {
+                            list.push(root);
+                        }
+                    }
+                }
+            }
+            
+            const children = root.children || [];
+            for (const child of children) {
+                collectRenderables(child, list);
+            }
+            
+            if (root.shadowRoot) {
+                collectRenderables(root.shadowRoot, list);
+            }
+            
+            return list;
+        }
+
+        // Helper to draw a rounded rectangle on a canvas context
+        function drawRoundedRect(ctx, x, y, w, h, r) {
+            if (w < 2 * r) r = w / 2;
+            if (h < 2 * r) r = h / 2;
+            ctx.beginPath();
+            ctx.moveTo(x + r, y);
+            ctx.arcTo(x + w, y, x + w, y + h, r);
+            ctx.arcTo(x + w, y + h, x, y + h, r);
+            ctx.arcTo(x, y + h, x, y, r);
+            ctx.arcTo(x, y, x + w, y, r);
+            ctx.closePath();
+        }
+
+        // Helper to clone SVG and inline computed styles so they render correctly in standalone context
+        function cloneSvgWithComputedStyles(sourceSvg, w, h) {
+            const clonedSvg = sourceSvg.cloneNode(true);
+            clonedSvg.setAttribute("width", w);
+            clonedSvg.setAttribute("height", h);
+            clonedSvg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+            
+            // Inline computed styles for the SVG element itself
+            const svgStyle = window.getComputedStyle(sourceSvg);
+            clonedSvg.style.fontFamily = svgStyle.fontFamily;
+            clonedSvg.style.fontSize = svgStyle.fontSize;
+            clonedSvg.style.fill = svgStyle.fill;
+            clonedSvg.style.stroke = svgStyle.stroke;
+
+            // Recurse through all elements to copy computed styles
+            const sourceElements = sourceSvg.querySelectorAll('*');
+            const targetElements = clonedSvg.querySelectorAll('*');
+            
+            for (let i = 0; i < sourceElements.length; i++) {
+                const src = sourceElements[i];
+                const dst = targetElements[i];
+                if (!src || !dst) continue;
+                
+                const style = window.getComputedStyle(src);
+                
+                // Copy presentation properties from computed style to inline style
+                const propertiesToCopy = [
+                    'fill', 'stroke', 'stroke-width', 'opacity', 'fill-opacity', 'stroke-opacity',
+                    'font-family', 'font-size', 'font-weight', 'font-style', 'text-anchor', 'dominant-baseline'
+                ];
+                
+                for (const prop of propertiesToCopy) {
+                    const val = style[prop];
+                    if (val) {
+                        dst.style[prop] = val;
+                    }
+                }
+            }
+            
+            return clonedSvg;
+        }
+
+        // Helper to draw an SVG element onto a canvas context asynchronously
+        function drawSvgOnCanvas(svg, ctx, x, y, w, h) {
+            return new Promise((resolve) => {
+                try {
+                    const clonedSvg = cloneSvgWithComputedStyles(svg, w, h);
+                    if (!clonedSvg.getAttribute("xmlns")) {
+                        clonedSvg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+                    }
+                    
+                    const serializer = new XMLSerializer();
+                    let svgString = serializer.serializeToString(clonedSvg);
+                    
+                    // Inject basic style rules to ensure text/labels are styled correctly in dark theme
+                    if (!svgString.includes("<style>")) {
+                        const styleInject = `<style>
+                            text { fill: #e0e0e0 !important; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important; font-size: 10px !important; }
+                            path.domain, line { stroke: #444444 !important; }
+                        </style>`;
+                        svgString = svgString.replace(/<svg([^>]*)>/, `<svg$1>${styleInject}`);
+                    }
+                    
+                    const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+                    const url = URL.createObjectURL(svgBlob);
+                    
+                    const img = new Image();
+                    img.onload = () => {
+                        ctx.drawImage(img, x, y, w, h);
+                        URL.revokeObjectURL(url);
+                        resolve();
+                    };
+                    img.onerror = (e) => {
+                        console.error("SVG image load error:", e);
+                        URL.revokeObjectURL(url);
+                        resolve();
+                    };
+                    img.src = url;
+                } catch (e) {
+                    console.error("Error rendering SVG:", e);
+                    resolve();
+                }
+            });
+        }
+
+        // Shadow DOM Active Chart PNG Capturer Event
+        captureChartBtn.addEventListener('click', async () => {
+            try {
+                // Retrieve the active plugin instance directly using the official, stable Perspective JS API!
+                const activePlugin = await viewer.getPlugin();
+                
+                if (activePlugin && activePlugin.tagName.toLowerCase().startsWith('perspective-viewer-d3fc-')) {
+                    statusMsg.style.display = 'block';
+                    statusMsg.innerText = "Composing high-resolution chart...";
+                    
+                    const parentRect = activePlugin.getBoundingClientRect();
+                    const compositeCanvas = document.createElement('canvas');
+                    
+                    // Account for device pixel ratio for crisp Retina screenshots!
+                    const dpr = window.devicePixelRatio || 1;
+                    compositeCanvas.width = parentRect.width * dpr;
+                    compositeCanvas.height = parentRect.height * dpr;
+                    
+                    const ctx = compositeCanvas.getContext('2d');
+                    ctx.scale(dpr, dpr);
+                    
+                    // Fill background with dark theme background color
+                    ctx.fillStyle = '#111111';
+                    ctx.fillRect(0, 0, parentRect.width, parentRect.height);
+                    
+                    // Recursively collect all canvas, SVG, and visible HTML renderable nodes from the plugin's shadow root
+                    const renderables = collectRenderables(activePlugin.shadowRoot);
+                    
+                    const drawPromises = [];
+                    
+                    for (const el of renderables) {
+                        const rect = el.getBoundingClientRect();
+                        const x = rect.left - parentRect.left;
+                        const y = rect.top - parentRect.top;
+                        const w = rect.width;
+                        const h = rect.height;
+                        
+                        if (w === 0 || h === 0) continue;
+                        
+                        if (el.tagName === 'CANVAS') {
+                            ctx.drawImage(el, x, y, w, h);
+                        } else if (el.tagName === 'svg' || el.tagName === 'SVG') {
+                            drawPromises.push(drawSvgOnCanvas(el, ctx, x, y, w, h));
+                        } else {
+                            // HTML element (Text or Swatch)
+                            const style = window.getComputedStyle(el);
+                            const directText = Array.from(el.childNodes)
+                                .filter(node => node.nodeType === Node.TEXT_NODE)
+                                .map(node => node.textContent.trim())
+                                .join("");
+                            
+                            if (directText.length > 0) {
+                                const font = `${style.fontStyle || 'normal'} normal ${style.fontWeight || 'normal'} ${style.fontSize || '12px'} ${style.fontFamily || 'sans-serif'}`;
+                                const color = style.color || '#e0e0e0';
+                                const transform = style.transform;
+                                
+                                ctx.save();
+                                // Translate to center of element bounding box
+                                ctx.translate(x + w / 2, y + h / 2);
+                                
+                                if (transform && transform !== 'none') {
+                                    const match = transform.match(/^matrix\((.+)\)$/);
+                                    if (match) {
+                                        const parts = match[1].split(',').map(Number);
+                                        if (parts.length === 6) {
+                                            const [a, b, c, d] = parts;
+                                            ctx.transform(a, b, c, d, 0, 0);
+                                        }
+                                    }
+                                }
+                                
+                                ctx.font = font;
+                                ctx.fillStyle = color;
+                                ctx.textAlign = 'center';
+                                ctx.textBaseline = 'middle';
+                                ctx.fillText(directText, 0, 0);
+                                ctx.restore();
+                            } else {
+                                // Draw color swatch
+                                const bgColor = style.backgroundColor;
+                                if (bgColor && bgColor !== 'transparent' && bgColor !== 'rgba(0, 0, 0, 0)') {
+                                    const borderRadius = parseFloat(style.borderRadius) || 0;
+                                    ctx.save();
+                                    ctx.fillStyle = bgColor;
+                                    if (borderRadius > 0) {
+                                        drawRoundedRect(ctx, x, y, w, h, borderRadius);
+                                        ctx.fill();
+                                    } else {
+                                        ctx.fillRect(x, y, w, h);
+                                    }
+                                    ctx.restore();
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Wait for all SVG layers (X-axis, Y-axis, labels) to finish drawing
+                    await Promise.all(drawPromises);
+                    
+                    // Trigger PNG download
+                    const dataUrl = compositeCanvas.toDataURL("image/png");
+                    const a = document.createElement('a');
+                    a.href = dataUrl;
+                    a.download = `chart_snapshot_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.png`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    
+                    statusMsg.innerText = "";
+                    flashButtonSuccess(captureChartBtn, "📸 Captured!");
+                    return;
+                }
+                
+                // Fallback / Alert if in Datagrid spreadsheet view
+                alert("Snapshots are supported for chart views.\n\nTo save spreadsheet data, please use the 'Export Data' button.");
+            } catch (err) {
+                console.error("Failed to compose chart:", err);
+                alert("Failed to capture chart snapshot.");
+                statusMsg.innerText = "";
+            }
+        });
+
+        async function processCSV(file) {
+            try {
+                statusMsg.innerText = "Initializing WebAssembly Worker...";
+                progressContainer.style.display = 'block';
+                progressBar.style.width = '0%';
+
+                activeWorker = await perspective.worker();
+
+                const stream = file.stream();
+                const reader = stream.getReader();
+                const decoder = new TextDecoder("utf-8");
+
+                activeTable = null;
+                let headerLine = "";
+                let partialLine = "";
+                let bytesRead = 0;
+                const totalBytes = file.size;
+
+                let accumulatedChunk = "";
+                const CHUNK_SIZE_THRESHOLD = 10 * 1024 * 1024; // 10 MB chunks
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) {
+                        let remainingText = partialLine + accumulatedChunk;
+                        if (remainingText.trim().length > 0) {
+                            if (!activeTable) {
+                                activeTable = await activeWorker.table(remainingText);
+                            } else {
+                                await activeTable.update(headerLine + "\n" + remainingText);
+                            }
+                        }
+                        break;
+                    }
+
+                    bytesRead += value.length;
+                    const percent = ((bytesRead / totalBytes) * 100).toFixed(1);
+                    statusMsg.innerText = `Loading: ${percent}% (${(bytesRead / (1024 * 1024)).toFixed(1)} MB / ${(totalBytes / (1024 * 1024)).toFixed(1)} MB)`;
+                    progressBar.style.width = `${percent}%`;
+
+                    const chunkText = decoder.decode(value, { stream: true });
+                    accumulatedChunk += chunkText;
+
+                    if (accumulatedChunk.length >= CHUNK_SIZE_THRESHOLD) {
+                        let textToParse = partialLine + accumulatedChunk;
+                        accumulatedChunk = "";
+
+                        const lastNewlineIdx = textToParse.lastIndexOf("\n");
+                        if (lastNewlineIdx !== -1) {
+                            const completeText = textToParse.substring(0, lastNewlineIdx + 1);
+                            partialLine = textToParse.substring(lastNewlineIdx + 1);
+
+                            if (!activeTable) {
+                                const firstNewline = completeText.indexOf("\n");
+                                if (firstNewline !== -1) {
+                                    headerLine = completeText.substring(0, firstNewline);
+                                }
+                                activeTable = await activeWorker.table(completeText);
+                            } else {
+                                await activeTable.update(headerLine + "\n" + completeText);
+                            }
+                        } else {
+                            partialLine = textToParse;
+                        }
+                    }
+                }
+
+                statusMsg.innerText = "Rendering analytics canvas...";
+                progressBar.style.width = '100%';
+
+                // Pivot View Frame Toggles
+                dropZone.style.display = 'none';
+                viewerContainer.style.display = 'flex';
+                appHeader.style.display = 'flex';
+                updateLayoutSelectDropdown();
+
+                await viewer.load(activeTable);
+                viewer.restore({ plugin: "Datagrid", settings: true });
+
+            } catch (error) {
+                console.error("Detailed Internal Error Context:", error);
+                alert(`Critical Parsing Failure.\n\nEnsure you are NOT opening this file via double-click (file://).\nIt MUST be run via a local HTTP server.`);
+                statusMsg.innerText = "";
+                progressContainer.style.display = 'none';
+            }
+        }
+    </script>
+</body>
+
+</html>

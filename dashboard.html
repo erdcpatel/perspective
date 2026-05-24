@@ -1,0 +1,1511 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Professional Trading Analytics Dashboard powered by FINOS Perspective — real-time filtering, interactive charts, and data grid.">
+    <title>TradeVision — Analytics Dashboard</title>
+
+    <!-- Cross-Origin Isolation for WASM multithreading (GitHub Pages) -->
+    <script src="coi-serviceworker.js"></script>
+
+    <!-- Perspective WASM Preloads -->
+    <link rel="preload" href="https://cdn.jsdelivr.net/npm/@perspective-dev/client@4.4.1/dist/wasm/perspective-server.wasm"
+        as="fetch" type="application/wasm" crossorigin="anonymous" />
+    <link rel="preload"
+        href="https://cdn.jsdelivr.net/npm/@perspective-dev/viewer@4.4.1/dist/wasm/perspective-viewer.wasm"
+        as="fetch" type="application/wasm" crossorigin="anonymous" />
+    <link rel="stylesheet" crossorigin="anonymous"
+        href="https://cdn.jsdelivr.net/npm/@perspective-dev/viewer@4.4.1/dist/css/themes.css" />
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
+
+    <style>
+        :root {
+            --bg-primary: #0a0e17;
+            --bg-secondary: #111827;
+            --bg-card: #1a1f2e;
+            --bg-card-hover: #222840;
+            --border-color: #1e293b;
+            --border-accent: #334155;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --accent-blue: #3b82f6;
+            --accent-blue-glow: rgba(59, 130, 246, 0.15);
+            --accent-cyan: #06b6d4;
+            --accent-emerald: #10b981;
+            --accent-amber: #f59e0b;
+            --accent-rose: #f43f5e;
+            --accent-violet: #8b5cf6;
+            --gradient-blue: linear-gradient(135deg, #3b82f6, #06b6d4);
+            --gradient-green: linear-gradient(135deg, #10b981, #34d399);
+            --gradient-amber: linear-gradient(135deg, #f59e0b, #fbbf24);
+            --gradient-rose: linear-gradient(135deg, #f43f5e, #fb7185);
+            --gradient-violet: linear-gradient(135deg, #8b5cf6, #a78bfa);
+            --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
+            --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
+            --shadow-lg: 0 8px 32px rgba(0,0,0,0.5);
+            --shadow-glow: 0 0 20px rgba(59, 130, 246, 0.1);
+            --radius-sm: 6px;
+            --radius-md: 10px;
+            --radius-lg: 14px;
+            --radius-xl: 20px;
+            --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html, body {
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* ═══════════════ UPLOAD SCREEN ═══════════════ */
+        #upload-screen {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: radial-gradient(ellipse at 50% 0%, rgba(59,130,246,0.08) 0%, transparent 60%),
+                        var(--bg-primary);
+            position: relative;
+            z-index: 10;
+        }
+
+        .upload-logo {
+            font-size: 56px;
+            margin-bottom: 8px;
+            animation: float 3s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-8px); }
+        }
+
+        .upload-title {
+            font-size: 32px;
+            font-weight: 800;
+            background: var(--gradient-blue);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 8px;
+            letter-spacing: -0.5px;
+        }
+
+        .upload-subtitle {
+            font-size: 15px;
+            color: var(--text-secondary);
+            margin-bottom: 32px;
+            text-align: center;
+            max-width: 480px;
+            line-height: 1.6;
+        }
+
+        #drop-zone {
+            width: 520px;
+            max-width: 90vw;
+            padding: 48px 32px;
+            border: 2px dashed var(--border-accent);
+            border-radius: var(--radius-xl);
+            background: var(--bg-card);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            cursor: pointer;
+            transition: var(--transition);
+            position: relative;
+            overflow: hidden;
+        }
+
+        #drop-zone::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: var(--accent-blue-glow);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        #drop-zone:hover::before,
+        #drop-zone.dragover::before {
+            opacity: 1;
+        }
+
+        #drop-zone.dragover {
+            border-color: var(--accent-blue);
+            transform: scale(1.02);
+        }
+
+        .drop-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+            opacity: 0.9;
+        }
+
+        .drop-text {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 6px;
+        }
+
+        .drop-hint {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-bottom: 20px;
+        }
+
+        .browse-btn {
+            background: var(--gradient-blue);
+            color: #fff;
+            border: none;
+            padding: 12px 32px;
+            font-size: 14px;
+            font-weight: 600;
+            font-family: inherit;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: var(--transition);
+            box-shadow: 0 4px 15px rgba(59,130,246,0.3);
+            position: relative;
+            z-index: 1;
+        }
+
+        .browse-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(59,130,246,0.4);
+        }
+
+        #upload-status {
+            margin-top: 16px;
+            font-size: 13px;
+            color: var(--accent-cyan);
+            font-weight: 500;
+            min-height: 20px;
+        }
+
+        .upload-progress-track {
+            width: 80%;
+            max-width: 360px;
+            height: 4px;
+            background: var(--bg-secondary);
+            border-radius: 4px;
+            margin-top: 12px;
+            overflow: hidden;
+            display: none;
+        }
+
+        .upload-progress-fill {
+            width: 0%;
+            height: 100%;
+            background: var(--gradient-blue);
+            border-radius: 4px;
+            transition: width 0.15s ease;
+        }
+
+        /* ═══════════════ DASHBOARD SHELL ═══════════════ */
+        #dashboard-shell {
+            display: none;
+            width: 100%;
+            height: 100%;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* ─── Top Nav ─── */
+        .top-nav {
+            height: 52px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            flex-shrink: 0;
+            z-index: 100;
+        }
+
+        .nav-brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .nav-logo {
+            font-size: 22px;
+        }
+
+        .nav-title {
+            font-size: 15px;
+            font-weight: 700;
+            background: var(--gradient-blue);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.3px;
+        }
+
+        .nav-file-info {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-left: 12px;
+            padding-left: 12px;
+            border-left: 1px solid var(--border-color);
+        }
+
+        .nav-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .nav-btn {
+            background: rgba(255,255,255,0.05);
+            color: var(--text-secondary);
+            border: 1px solid var(--border-color);
+            padding: 6px 14px;
+            font-size: 12px;
+            font-weight: 500;
+            font-family: inherit;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: var(--transition);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .nav-btn:hover {
+            background: rgba(255,255,255,0.1);
+            color: var(--text-primary);
+            border-color: var(--border-accent);
+        }
+
+        .nav-btn.primary {
+            background: var(--accent-blue);
+            color: #fff;
+            border-color: transparent;
+        }
+
+        .nav-btn.primary:hover {
+            background: #2563eb;
+        }
+
+        /* ─── Dashboard Scroll Area ─── */
+        .dashboard-content {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            scroll-behavior: smooth;
+        }
+
+        .dashboard-content::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .dashboard-content::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .dashboard-content::-webkit-scrollbar-thumb {
+            background: var(--border-accent);
+            border-radius: 3px;
+        }
+
+        /* ─── Section Header ─── */
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 4px;
+        }
+
+        .section-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+        }
+
+        /* ─── Filter Bar ─── */
+        .filter-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 16px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            flex-wrap: wrap;
+            flex-shrink: 0;
+        }
+
+        .filter-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            margin-right: 4px;
+        }
+
+        .filter-select {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+            padding: 6px 12px;
+            font-size: 12px;
+            font-family: inherit;
+            font-weight: 500;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: var(--transition);
+            outline: none;
+            min-width: 120px;
+        }
+
+        .filter-select:hover,
+        .filter-select:focus {
+            border-color: var(--accent-blue);
+            background: var(--bg-card);
+        }
+
+        .filter-select option {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+        }
+
+        .filter-reset-btn {
+            background: rgba(244, 63, 94, 0.1);
+            color: var(--accent-rose);
+            border: 1px solid rgba(244, 63, 94, 0.2);
+            padding: 6px 14px;
+            font-size: 12px;
+            font-weight: 500;
+            font-family: inherit;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: var(--transition);
+            margin-left: auto;
+        }
+
+        .filter-reset-btn:hover {
+            background: var(--accent-rose);
+            color: #fff;
+            border-color: transparent;
+        }
+
+        /* ─── KPI Metrics Row ─── */
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 12px;
+            flex-shrink: 0;
+        }
+
+        @media (max-width: 1400px) {
+            .kpi-grid { grid-template-columns: repeat(3, 1fr); }
+        }
+
+        @media (max-width: 800px) {
+            .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+
+        .kpi-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 16px 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            transition: var(--transition);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .kpi-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            border-radius: 3px 3px 0 0;
+        }
+
+        .kpi-card:nth-child(1)::before { background: var(--gradient-blue); }
+        .kpi-card:nth-child(2)::before { background: var(--gradient-green); }
+        .kpi-card:nth-child(3)::before { background: var(--gradient-amber); }
+        .kpi-card:nth-child(4)::before { background: var(--gradient-rose); }
+        .kpi-card:nth-child(5)::before { background: var(--gradient-violet); }
+        .kpi-card:nth-child(6)::before { background: linear-gradient(135deg, #06b6d4, #22d3ee); }
+
+        .kpi-card:hover {
+            border-color: var(--border-accent);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .kpi-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+        }
+
+        .kpi-value {
+            font-size: 26px;
+            font-weight: 800;
+            color: var(--text-primary);
+            letter-spacing: -0.5px;
+            line-height: 1.1;
+        }
+
+        .kpi-sub {
+            font-size: 11px;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .kpi-positive { color: var(--accent-emerald); }
+        .kpi-negative { color: var(--accent-rose); }
+
+        /* ─── Chart Grid (2-col) ─── */
+        .chart-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        @media (max-width: 1000px) {
+            .chart-grid { grid-template-columns: 1fr; }
+        }
+
+        .chart-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            transition: var(--transition);
+        }
+
+        .chart-card:hover {
+            border-color: var(--border-accent);
+            box-shadow: var(--shadow-md);
+        }
+
+        .chart-card.full-width {
+            grid-column: 1 / -1;
+        }
+
+        .chart-header {
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border-color);
+            flex-shrink: 0;
+        }
+
+        .chart-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .chart-badge {
+            font-size: 10px;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 20px;
+            background: var(--accent-blue-glow);
+            color: var(--accent-blue);
+        }
+
+        .chart-body {
+            position: relative;
+            height: 320px;
+            width: 100%;
+        }
+
+        .chart-body.tall {
+            height: 420px;
+        }
+
+        .chart-body perspective-viewer {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            --column-header-font-size: 11px;
+        }
+
+        /* ─── Tabs ─── */
+        .tab-row {
+            display: flex;
+            gap: 0;
+            border-bottom: 1px solid var(--border-color);
+            flex-shrink: 0;
+        }
+
+        .tab-btn {
+            background: transparent;
+            color: var(--text-muted);
+            border: none;
+            padding: 10px 20px;
+            font-size: 13px;
+            font-weight: 500;
+            font-family: inherit;
+            cursor: pointer;
+            transition: var(--transition);
+            border-bottom: 2px solid transparent;
+            position: relative;
+        }
+
+        .tab-btn:hover {
+            color: var(--text-secondary);
+            background: rgba(255,255,255,0.02);
+        }
+
+        .tab-btn.active {
+            color: var(--accent-blue);
+            border-bottom-color: var(--accent-blue);
+            background: rgba(59,130,246,0.05);
+        }
+
+        /* ─── Tab Content Panels ─── */
+        .tab-panel {
+            display: none;
+        }
+
+        .tab-panel.active {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        /* ─── Data Grid Section ─── */
+        .grid-container {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .grid-body {
+            position: relative;
+            height: 500px;
+            width: 100%;
+        }
+
+        .grid-body perspective-viewer {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* ─── Loading Overlay ─── */
+        .loading-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(10, 14, 23, 0.9);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .loading-overlay.visible {
+            display: flex;
+        }
+
+        .loading-spinner {
+            width: 48px;
+            height: 48px;
+            border: 3px solid var(--border-color);
+            border-top-color: var(--accent-blue);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            font-size: 14px;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        /* ─── Pulse Animation for KPI ─── */
+        @keyframes pulseGlow {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        .kpi-loading .kpi-value {
+            animation: pulseGlow 1.5s ease-in-out infinite;
+            color: var(--text-muted);
+        }
+
+        /* Hide Perspective settings toggle button */
+        perspective-viewer {
+            --settings-button-display: none;
+        }
+    </style>
+
+    <!-- Perspective Scripts -->
+    <script type="module"
+        src="https://cdn.jsdelivr.net/npm/@perspective-dev/viewer@4.4.1/dist/cdn/perspective-viewer.js"></script>
+    <script type="module"
+        src="https://cdn.jsdelivr.net/npm/@perspective-dev/viewer-datagrid@4.4.1/dist/cdn/perspective-viewer-datagrid.js"></script>
+    <script type="module"
+        src="https://cdn.jsdelivr.net/npm/@perspective-dev/viewer-d3fc@4.4.1/dist/cdn/perspective-viewer-d3fc.js"></script>
+</head>
+
+<body>
+
+    <!-- ═══════════════ UPLOAD SCREEN ═══════════════ -->
+    <div id="upload-screen">
+        <div class="upload-logo">📊</div>
+        <div class="upload-title">TradeVision</div>
+        <p class="upload-subtitle">
+            Upload a CSV trade file to instantly generate a professional analytics dashboard
+            with interactive charts, filters, metrics — 100% client-side, zero data leaves your browser.
+        </p>
+        <div id="drop-zone">
+            <div class="drop-icon">📁</div>
+            <div class="drop-text">Drag & drop your CSV file here</div>
+            <div class="drop-hint">or click below to browse</div>
+            <input type="file" id="file-picker" accept=".csv" style="display: none;" />
+            <button class="browse-btn" id="browse-btn">Select CSV File</button>
+            <div id="upload-status"></div>
+            <div class="upload-progress-track" id="progress-track">
+                <div class="upload-progress-fill" id="progress-fill"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════ LOADING OVERLAY ═══════════════ -->
+    <div class="loading-overlay" id="loading-overlay">
+        <div class="loading-spinner"></div>
+        <div class="loading-text" id="loading-text">Initializing dashboard...</div>
+    </div>
+
+    <!-- ═══════════════ DASHBOARD ═══════════════ -->
+    <div id="dashboard-shell">
+        <!-- Top Navigation -->
+        <nav class="top-nav">
+            <div class="nav-brand">
+                <span class="nav-logo">📊</span>
+                <span class="nav-title">TradeVision</span>
+                <span class="nav-file-info" id="nav-file-info"></span>
+            </div>
+            <div class="nav-actions">
+                <button class="nav-btn" id="export-csv-btn" title="Export filtered data as CSV">📥 Export CSV</button>
+                <button class="nav-btn primary" id="new-file-btn" title="Load a different file">📂 New File</button>
+            </div>
+        </nav>
+
+        <!-- Dashboard Content Area -->
+        <div class="dashboard-content" id="dashboard-content">
+
+            <!-- ─── Global Filters ─── -->
+            <div class="filter-bar" id="filter-bar">
+                <span class="filter-label">🔍 Filters</span>
+                <select class="filter-select" id="filter-desk"><option value="">All Desks</option></select>
+                <select class="filter-select" id="filter-region"><option value="">All Regions</option></select>
+                <select class="filter-select" id="filter-side"><option value="">All Sides</option></select>
+                <select class="filter-select" id="filter-venue"><option value="">All Venues</option></select>
+                <select class="filter-select" id="filter-client"><option value="">All Client Types</option></select>
+                <select class="filter-select" id="filter-algo"><option value="">All Algorithms</option></select>
+                <select class="filter-select" id="filter-liquidity"><option value="">All Liquidity</option></select>
+                <select class="filter-select" id="filter-order"><option value="">All Order Types</option></select>
+                <button class="filter-reset-btn" id="filter-reset-btn">✕ Reset Filters</button>
+            </div>
+
+            <!-- ─── KPI Metrics ─── -->
+            <div class="section-header">
+                <span class="section-title">Key Metrics</span>
+            </div>
+            <div class="kpi-grid" id="kpi-grid">
+                <div class="kpi-card kpi-loading">
+                    <span class="kpi-label">Total Trades</span>
+                    <span class="kpi-value" id="kpi-total-trades">—</span>
+                    <span class="kpi-sub" id="kpi-total-trades-sub">&nbsp;</span>
+                </div>
+                <div class="kpi-card kpi-loading">
+                    <span class="kpi-label">Total Volume</span>
+                    <span class="kpi-value" id="kpi-total-volume">—</span>
+                    <span class="kpi-sub" id="kpi-total-volume-sub">&nbsp;</span>
+                </div>
+                <div class="kpi-card kpi-loading">
+                    <span class="kpi-label">Total Notional</span>
+                    <span class="kpi-value" id="kpi-total-notional">—</span>
+                    <span class="kpi-sub" id="kpi-total-notional-sub">&nbsp;</span>
+                </div>
+                <div class="kpi-card kpi-loading">
+                    <span class="kpi-label">Total P&L</span>
+                    <span class="kpi-value" id="kpi-total-pnl">—</span>
+                    <span class="kpi-sub" id="kpi-total-pnl-sub">&nbsp;</span>
+                </div>
+                <div class="kpi-card kpi-loading">
+                    <span class="kpi-label">Avg Spread</span>
+                    <span class="kpi-value" id="kpi-avg-spread">—</span>
+                    <span class="kpi-sub" id="kpi-avg-spread-sub">&nbsp;</span>
+                </div>
+                <div class="kpi-card kpi-loading">
+                    <span class="kpi-label">Cross Rate</span>
+                    <span class="kpi-value" id="kpi-cross-rate">—</span>
+                    <span class="kpi-sub" id="kpi-cross-rate-sub">&nbsp;</span>
+                </div>
+            </div>
+
+            <!-- ─── Tab Navigation ─── -->
+            <div class="tab-row" id="tab-row">
+                <button class="tab-btn active" data-tab="overview">📈 Overview</button>
+                <button class="tab-btn" data-tab="analysis">🔬 Deep Analysis</button>
+                <button class="tab-btn" data-tab="risk">⚠️ Risk & Quality</button>
+                <button class="tab-btn" data-tab="datagrid">📋 Data Grid</button>
+            </div>
+
+            <!-- ═══ TAB: Overview ═══ -->
+            <div class="tab-panel active" id="tab-overview">
+                <div class="chart-grid">
+                    <!-- PnL by Desk -->
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <span class="chart-title">💰 P&L by Desk <span class="chart-badge">Bar</span></span>
+                        </div>
+                        <div class="chart-body">
+                            <perspective-viewer id="chart-pnl-desk" theme="Pro Dark"></perspective-viewer>
+                        </div>
+                    </div>
+                    <!-- Volume by Region -->
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <span class="chart-title">🌍 Volume by Region & Desk <span class="chart-badge">Sunburst</span></span>
+                        </div>
+                        <div class="chart-body">
+                            <perspective-viewer id="chart-vol-region" theme="Pro Dark"></perspective-viewer>
+                        </div>
+                    </div>
+                    <!-- Trade Count by Side -->
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <span class="chart-title">⚖️ Trades by Side <span class="chart-badge">Horizontal Bar</span></span>
+                        </div>
+                        <div class="chart-body">
+                            <perspective-viewer id="chart-side" theme="Pro Dark"></perspective-viewer>
+                        </div>
+                    </div>
+                    <!-- Fee Distribution by Order Type -->
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <span class="chart-title">💳 Fees by Order & Client <span class="chart-badge">Stacked Bar</span></span>
+                        </div>
+                        <div class="chart-body">
+                            <perspective-viewer id="chart-fee-order" theme="Pro Dark"></perspective-viewer>
+                        </div>
+                    </div>
+                    <!-- PnL over Time (full width) -->
+                    <div class="chart-card full-width">
+                        <div class="chart-header">
+                            <span class="chart-title">📅 P&L Trend Over Time <span class="chart-badge">Area</span></span>
+                        </div>
+                        <div class="chart-body tall">
+                            <perspective-viewer id="chart-pnl-time" theme="Pro Dark"></perspective-viewer>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══ TAB: Deep Analysis ═══ -->
+            <div class="tab-panel" id="tab-analysis">
+                <div class="chart-grid">
+                    <!-- Volume by Symbol (Top 20 Treemap) -->
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <span class="chart-title">🏷️ Volume by Symbol <span class="chart-badge">Treemap</span></span>
+                        </div>
+                        <div class="chart-body">
+                            <perspective-viewer id="chart-vol-symbol" theme="Pro Dark"></perspective-viewer>
+                        </div>
+                    </div>
+                    <!-- PnL by Algorithm -->
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <span class="chart-title">🤖 P&L by Algorithm <span class="chart-badge">Horizontal Bar</span></span>
+                        </div>
+                        <div class="chart-body">
+                            <perspective-viewer id="chart-pnl-algo" theme="Pro Dark"></perspective-viewer>
+                        </div>
+                    </div>
+                    <!-- Quantity by Client Type -->
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <span class="chart-title">👥 Qty by Client Type <span class="chart-badge">Line</span></span>
+                        </div>
+                        <div class="chart-body">
+                            <perspective-viewer id="chart-qty-client" theme="Pro Dark"></perspective-viewer>
+                        </div>
+                    </div>
+                    <!-- Desk × Region Heatmap -->
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <span class="chart-title">🔥 Desk × Region <span class="chart-badge">Heatmap</span></span>
+                        </div>
+                        <div class="chart-body">
+                            <perspective-viewer id="chart-heatmap" theme="Pro Dark"></perspective-viewer>
+                        </div>
+                    </div>
+                    <!-- Venue Volume Distribution (full width) -->
+                    <div class="chart-card full-width">
+                        <div class="chart-header">
+                            <span class="chart-title">🏛️ Volume by Venue & Side <span class="chart-badge">Grouped Bar</span></span>
+                        </div>
+                        <div class="chart-body">
+                            <perspective-viewer id="chart-vol-venue" theme="Pro Dark"></perspective-viewer>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══ TAB: Risk & Quality ═══ -->
+            <div class="tab-panel" id="tab-risk">
+                <div class="chart-grid">
+                    <!-- Volatility by Desk -->
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <span class="chart-title">📊 Avg Volatility by Desk <span class="chart-badge">Bar</span></span>
+                        </div>
+                        <div class="chart-body">
+                            <perspective-viewer id="chart-vol-desk" theme="Pro Dark"></perspective-viewer>
+                        </div>
+                    </div>
+                    <!-- Spread by Liquidity -->
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <span class="chart-title">💧 Spread by Liquidity <span class="chart-badge">Bar</span></span>
+                        </div>
+                        <div class="chart-body">
+                            <perspective-viewer id="chart-spread-liq" theme="Pro Dark"></perspective-viewer>
+                        </div>
+                    </div>
+                    <!-- Crossed Trades by Desk -->
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <span class="chart-title">❌ Crossed Trades by Desk <span class="chart-badge">Stacked Bar</span></span>
+                        </div>
+                        <div class="chart-body">
+                            <perspective-viewer id="chart-crossed" theme="Pro Dark"></perspective-viewer>
+                        </div>
+                    </div>
+                    <!-- PnL Distribution by Liquidity -->
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <span class="chart-title">📉 P&L by Liquidity <span class="chart-badge">Bar</span></span>
+                        </div>
+                        <div class="chart-body">
+                            <perspective-viewer id="chart-pnl-liq" theme="Pro Dark"></perspective-viewer>
+                        </div>
+                    </div>
+                    <!-- Price vs Volatility Scatter (full width) -->
+                    <div class="chart-card full-width">
+                        <div class="chart-header">
+                            <span class="chart-title">🎯 Price vs Volatility <span class="chart-badge">Scatter</span></span>
+                        </div>
+                        <div class="chart-body tall">
+                            <perspective-viewer id="chart-scatter" theme="Pro Dark"></perspective-viewer>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══ TAB: Data Grid ═══ -->
+            <div class="tab-panel" id="tab-datagrid">
+                <div class="grid-container">
+                    <div class="chart-header">
+                        <span class="chart-title">📋 Trade Data (Filtered) <span class="chart-badge">Grid</span></span>
+                    </div>
+                    <div class="grid-body">
+                        <perspective-viewer id="main-grid" theme="Pro Dark"></perspective-viewer>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════ MAIN SCRIPT ═══════════════ -->
+    <script type="module">
+        import perspective from "https://cdn.jsdelivr.net/npm/@perspective-dev/client@4.4.1/dist/cdn/perspective.js";
+
+        // ─── DOM References ───
+        const uploadScreen = document.getElementById('upload-screen');
+        const dashboardShell = document.getElementById('dashboard-shell');
+        const dropZone = document.getElementById('drop-zone');
+        const filePicker = document.getElementById('file-picker');
+        const browseBtn = document.getElementById('browse-btn');
+        const uploadStatus = document.getElementById('upload-status');
+        const progressTrack = document.getElementById('progress-track');
+        const progressFill = document.getElementById('progress-fill');
+        const loadingOverlay = document.getElementById('loading-overlay');
+        const loadingText = document.getElementById('loading-text');
+        const newFileBtn = document.getElementById('new-file-btn');
+        const exportCsvBtn = document.getElementById('export-csv-btn');
+        const navFileInfo = document.getElementById('nav-file-info');
+        const filterResetBtn = document.getElementById('filter-reset-btn');
+
+        // ─── Global State ───
+        let worker = null;
+        let masterTable = null;
+        let currentFilters = {};
+
+        // Filter config mapping: filter element ID → CSV column name
+        const FILTER_MAP = {
+            'filter-desk': 'desk',
+            'filter-region': 'region',
+            'filter-side': 'side',
+            'filter-venue': 'execution_venue',
+            'filter-client': 'client_type',
+            'filter-algo': 'algorithm',
+            'filter-liquidity': 'liquidity_flag',
+            'filter-order': 'order_type'
+        };
+
+        // All viewer IDs and their configs
+        const VIEWER_CONFIGS = {
+            // ─── Overview Tab ───
+            'chart-pnl-desk': {
+                plugin: "Y Bar",
+                group_by: ["desk"],
+                columns: ["pnl"],
+                aggregates: { pnl: "sum" },
+                sort: [["pnl", "desc"]],
+                settings: false
+            },
+            'chart-vol-region': {
+                plugin: "Sunburst",
+                group_by: ["region", "desk"],
+                columns: ["quantity"],
+                aggregates: { quantity: "sum" },
+                settings: false
+            },
+            'chart-side': {
+                plugin: "X Bar",
+                group_by: ["side"],
+                columns: ["trade_id"],
+                aggregates: { trade_id: "count" },
+                sort: [["trade_id", "desc"]],
+                settings: false
+            },
+            'chart-fee-order': {
+                plugin: "Y Bar",
+                group_by: ["order_type"],
+                split_by: ["client_type"],
+                columns: ["fee"],
+                aggregates: { fee: "sum" },
+                settings: false
+            },
+            'chart-pnl-time': {
+                plugin: "Y Area",
+                group_by: ["timestamp"],
+                columns: ["pnl"],
+                aggregates: { pnl: "sum" },
+                settings: false
+            },
+            // ─── Analysis Tab ───
+            'chart-vol-symbol': {
+                plugin: "Treemap",
+                group_by: ["symbol"],
+                columns: ["quantity"],
+                aggregates: { quantity: "sum" },
+                sort: [["quantity", "desc"]],
+                settings: false
+            },
+            'chart-pnl-algo': {
+                plugin: "X Bar",
+                group_by: ["algorithm"],
+                columns: ["pnl"],
+                aggregates: { pnl: "sum" },
+                sort: [["pnl", "desc"]],
+                settings: false
+            },
+            'chart-qty-client': {
+                plugin: "Y Line",
+                group_by: ["client_type"],
+                columns: ["quantity"],
+                aggregates: { quantity: "sum" },
+                sort: [["quantity", "desc"]],
+                settings: false
+            },
+            'chart-heatmap': {
+                plugin: "Heatmap",
+                group_by: ["desk"],
+                split_by: ["region"],
+                columns: ["quantity"],
+                aggregates: { quantity: "sum" },
+                settings: false
+            },
+            'chart-vol-venue': {
+                plugin: "Y Bar",
+                group_by: ["execution_venue"],
+                split_by: ["side"],
+                columns: ["quantity"],
+                aggregates: { quantity: "sum" },
+                sort: [["quantity", "desc"]],
+                settings: false
+            },
+            // ─── Risk Tab ───
+            'chart-vol-desk': {
+                plugin: "Y Bar",
+                group_by: ["desk"],
+                columns: ["volatility"],
+                aggregates: { volatility: "mean" },
+                sort: [["volatility", "desc"]],
+                settings: false
+            },
+            'chart-spread-liq': {
+                plugin: "Y Bar",
+                group_by: ["liquidity_flag"],
+                columns: ["spread"],
+                aggregates: { spread: "mean" },
+                settings: false
+            },
+            'chart-crossed': {
+                plugin: "Y Bar",
+                group_by: ["desk"],
+                split_by: ["is_crossed"],
+                columns: ["trade_id"],
+                aggregates: { trade_id: "count" },
+                settings: false
+            },
+            'chart-pnl-liq': {
+                plugin: "Y Bar",
+                group_by: ["liquidity_flag"],
+                columns: ["pnl"],
+                aggregates: { pnl: "sum" },
+                settings: false
+            },
+            'chart-scatter': {
+                plugin: "X/Y Scatter",
+                columns: ["volatility", "price", "desk", null],
+                group_by: ["symbol"],
+                aggregates: { volatility: "mean", price: "mean" },
+                settings: false
+            },
+            // ─── Data Grid ───
+            'main-grid': {
+                plugin: "Datagrid",
+                settings: false,
+                columns: ["trade_id", "timestamp", "symbol", "side", "quantity", "price", "pnl", "fee", "desk", "region", "execution_venue", "order_type", "algorithm", "client_type", "volatility", "spread", "liquidity_flag", "is_crossed"]
+            }
+        };
+
+        // ═══════════════ FILE UPLOAD HANDLING ═══════════════
+
+        browseBtn.addEventListener('click', (e) => { e.stopPropagation(); filePicker.click(); });
+        dropZone.addEventListener('click', () => filePicker.click());
+        filePicker.addEventListener('change', async (e) => {
+            if (e.target.files.length > 0) await ingestFile(e.target.files[0]);
+        });
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+        dropZone.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            if (e.dataTransfer.files.length > 0) await ingestFile(e.dataTransfer.files[0]);
+        });
+
+        // ═══════════════ CSV INGESTION (STREAMED) ═══════════════
+
+        async function ingestFile(file) {
+            try {
+                uploadStatus.innerText = "Initializing WebAssembly engine...";
+                progressTrack.style.display = 'block';
+                progressFill.style.width = '0%';
+
+                worker = await perspective.worker();
+
+                const stream = file.stream();
+                const reader = stream.getReader();
+                const decoder = new TextDecoder("utf-8");
+
+                masterTable = null;
+                let headerLine = "";
+                let partialLine = "";
+                let bytesRead = 0;
+                const totalBytes = file.size;
+                let accumulatedChunk = "";
+                const CHUNK_THRESHOLD = 10 * 1024 * 1024; // 10 MB
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) {
+                        let remaining = partialLine + accumulatedChunk;
+                        if (remaining.trim().length > 0) {
+                            if (!masterTable) {
+                                masterTable = await worker.table(remaining);
+                            } else {
+                                await masterTable.update(headerLine + "\n" + remaining);
+                            }
+                        }
+                        break;
+                    }
+
+                    bytesRead += value.length;
+                    const pct = ((bytesRead / totalBytes) * 100).toFixed(1);
+                    uploadStatus.innerText = `Loading: ${pct}% (${(bytesRead / 1048576).toFixed(1)} MB / ${(totalBytes / 1048576).toFixed(1)} MB)`;
+                    progressFill.style.width = `${pct}%`;
+
+                    accumulatedChunk += decoder.decode(value, { stream: true });
+
+                    if (accumulatedChunk.length >= CHUNK_THRESHOLD) {
+                        let textToParse = partialLine + accumulatedChunk;
+                        accumulatedChunk = "";
+                        const lastNL = textToParse.lastIndexOf("\n");
+                        if (lastNL !== -1) {
+                            const completeText = textToParse.substring(0, lastNL + 1);
+                            partialLine = textToParse.substring(lastNL + 1);
+                            if (!masterTable) {
+                                const firstNL = completeText.indexOf("\n");
+                                if (firstNL !== -1) headerLine = completeText.substring(0, firstNL);
+                                masterTable = await worker.table(completeText);
+                            } else {
+                                await masterTable.update(headerLine + "\n" + completeText);
+                            }
+                        } else {
+                            partialLine = textToParse;
+                        }
+                    }
+                }
+
+                progressFill.style.width = '100%';
+                uploadStatus.innerText = "Building dashboard...";
+
+                // Show dashboard
+                uploadScreen.style.display = 'none';
+                dashboardShell.style.display = 'flex';
+                navFileInfo.textContent = `${file.name} • ${(totalBytes / 1048576).toFixed(1)} MB`;
+
+                await buildDashboard();
+
+            } catch (err) {
+                console.error("Ingestion error:", err);
+                uploadStatus.innerText = "Error loading file. Ensure it's a valid CSV and served via HTTP.";
+                progressTrack.style.display = 'none';
+            }
+        }
+
+        // ═══════════════ DASHBOARD BUILDER ═══════════════
+
+        async function buildDashboard() {
+            loadingOverlay.classList.add('visible');
+            loadingText.textContent = "Populating filters...";
+
+            // 1. Populate filter dropdowns
+            await populateFilters();
+
+            // 2. Load all viewers
+            loadingText.textContent = "Loading charts & grids...";
+            await loadAllViewers();
+
+            // 3. Compute KPIs
+            loadingText.textContent = "Computing metrics...";
+            await computeKPIs();
+
+            loadingOverlay.classList.remove('visible');
+        }
+
+        // ═══════════════ FILTER SYSTEM ═══════════════
+
+        async function populateFilters() {
+            const schema = await masterTable.schema();
+
+            for (const [selectId, colName] of Object.entries(FILTER_MAP)) {
+                if (!(colName in schema)) continue;
+
+                const select = document.getElementById(selectId);
+                const view = await masterTable.view({ columns: [colName] });
+                const colData = await view.to_columns();
+                await view.delete();
+
+                // Extract unique values safely, filtering out nulls, undefined, and empty strings
+                const values = Array.from(new Set(colData[colName]))
+                    .filter(v => v != null && v !== "")
+                    .sort();
+
+                // Keep existing first option (the "All ..." option)
+                const defaultOption = select.options[0].outerHTML;
+                select.innerHTML = defaultOption;
+                for (const val of values) {
+                    const opt = document.createElement('option');
+                    opt.value = String(val);
+                    opt.textContent = String(val);
+                    select.appendChild(opt);
+                }
+            }
+
+            // Attach filter change listeners
+            for (const selectId of Object.keys(FILTER_MAP)) {
+                document.getElementById(selectId).addEventListener('change', onFilterChange);
+            }
+
+            filterResetBtn.addEventListener('click', resetFilters);
+        }
+
+        function buildPerspectiveFilter() {
+            const filters = [];
+            for (const [selectId, colName] of Object.entries(FILTER_MAP)) {
+                const val = document.getElementById(selectId).value;
+                if (val) {
+                    filters.push([colName, "==", val]);
+                }
+            }
+            return filters;
+        }
+
+        async function onFilterChange() {
+            const filters = buildPerspectiveFilter();
+            // Apply filters to all viewers
+            const promises = [];
+            for (const viewerId of Object.keys(VIEWER_CONFIGS)) {
+                const viewer = document.getElementById(viewerId);
+                if (viewer) {
+                    promises.push(viewer.restore({ filter: filters }));
+                }
+            }
+            await Promise.all(promises);
+            // Recompute KPIs
+            await computeKPIs();
+        }
+
+        function resetFilters() {
+            for (const selectId of Object.keys(FILTER_MAP)) {
+                document.getElementById(selectId).selectedIndex = 0;
+            }
+            onFilterChange();
+        }
+
+        // ═══════════════ VIEWER LOADING ═══════════════
+
+        async function loadAllViewers() {
+            const loadPromises = [];
+            for (const [viewerId, config] of Object.entries(VIEWER_CONFIGS)) {
+                const el = document.getElementById(viewerId);
+                if (!el) continue;
+                loadPromises.push(
+                    el.load(masterTable).then(() => el.restore(config)).catch(err => {
+                        console.warn(`Failed to configure ${viewerId}:`, err);
+                    })
+                );
+            }
+            await Promise.all(loadPromises);
+        }
+
+        // ═══════════════ KPI COMPUTATION ═══════════════
+
+        function formatNumber(n) {
+            if (Math.abs(n) >= 1e9) return (n / 1e9).toFixed(2) + 'B';
+            if (Math.abs(n) >= 1e6) return (n / 1e6).toFixed(2) + 'M';
+            if (Math.abs(n) >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+            return n.toFixed(n % 1 === 0 ? 0 : 2);
+        }
+
+        function formatCurrency(n) {
+            const prefix = n >= 0 ? '$' : '-$';
+            return prefix + formatNumber(Math.abs(n));
+        }
+
+        async function computeKPIs() {
+            try {
+                const filters = buildPerspectiveFilter();
+
+                // Query grand total aggregated row entirely inside WebAssembly!
+                // This is infinitely scalable and works in milliseconds on 10M+ rows!
+                const vAgg = await masterTable.view({
+                    group_by: ["is_crossed"], // Use any group_by to get grand totals
+                    columns: ["trade_id", "quantity", "pnl", "fee", "spread"],
+                    expressions: [
+                        '// notional\n"price" * "quantity"',
+                        '// is_crossed_int\n"is_crossed" ? 1 : 0'
+                    ],
+                    aggregates: {
+                        trade_id: "count",
+                        quantity: "sum",
+                        pnl: "sum",
+                        fee: "sum",
+                        spread: "mean",
+                        notional: "sum",
+                        is_crossed_int: "sum"
+                    },
+                    filter: filters
+                });
+
+                const data = await vAgg.to_json();
+                await vAgg.delete();
+
+                // The first item (where __ROW_PATH__ is []) represents the grand total row
+                const grandTotal = data[0] || {};
+                
+                const countData = grandTotal.trade_id || 0;
+                const totalQuantity = grandTotal.quantity || 0;
+                const totalPnl = grandTotal.pnl || 0;
+                const totalFee = grandTotal.fee || 0;
+                const totalNotional = grandTotal.notional || 0;
+                const avgSpread = grandTotal.spread || 0;
+                const crossedCount = grandTotal.is_crossed_int || 0;
+                const crossRate = countData > 0 ? (crossedCount / countData * 100) : 0;
+
+                // Update KPI cards
+                document.getElementById('kpi-total-trades').textContent = formatNumber(countData);
+                document.getElementById('kpi-total-trades-sub').textContent = `Total filtered trades`;
+                document.getElementById('kpi-total-trades').closest('.kpi-card').classList.remove('kpi-loading');
+
+                document.getElementById('kpi-total-volume').textContent = formatNumber(totalQuantity);
+                document.getElementById('kpi-total-volume-sub').textContent = `Shares / contracts traded`;
+                document.getElementById('kpi-total-volume').closest('.kpi-card').classList.remove('kpi-loading');
+
+                document.getElementById('kpi-total-notional').textContent = formatCurrency(totalNotional);
+                document.getElementById('kpi-total-notional-sub').textContent = `Total fees: ${formatCurrency(totalFee)}`;
+                document.getElementById('kpi-total-notional').closest('.kpi-card').classList.remove('kpi-loading');
+
+                const pnlEl = document.getElementById('kpi-total-pnl');
+                pnlEl.textContent = formatCurrency(totalPnl);
+                pnlEl.className = `kpi-value ${totalPnl >= 0 ? 'kpi-positive' : 'kpi-negative'}`;
+                document.getElementById('kpi-total-pnl-sub').textContent = totalPnl >= 0 ? '↑ Net positive P&L' : '↓ Net negative P&L';
+                pnlEl.closest('.kpi-card').classList.remove('kpi-loading');
+
+                document.getElementById('kpi-avg-spread').textContent = (avgSpread * 100).toFixed(2) + '%';
+                document.getElementById('kpi-avg-spread-sub').textContent = `Across ${formatNumber(countData)} trades`;
+                document.getElementById('kpi-avg-spread').closest('.kpi-card').classList.remove('kpi-loading');
+
+                document.getElementById('kpi-cross-rate').textContent = crossRate.toFixed(1) + '%';
+                document.getElementById('kpi-cross-rate-sub').textContent = `${formatNumber(crossedCount)} crossed of ${formatNumber(countData)}`;
+                document.getElementById('kpi-cross-rate').closest('.kpi-card').classList.remove('kpi-loading');
+
+            } catch (err) {
+                console.error("KPI computation error:", err);
+            }
+        }
+
+        // ═══════════════ TAB SWITCHING ═══════════════
+
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+                btn.classList.add('active');
+                const tabId = `tab-${btn.dataset.tab}`;
+                document.getElementById(tabId).classList.add('active');
+
+                // Notify perspective viewers in the newly visible tab to re-render
+                const panel = document.getElementById(tabId);
+                panel.querySelectorAll('perspective-viewer').forEach(v => {
+                    v.notifyResize && v.notifyResize();
+                });
+            });
+        });
+
+        // ═══════════════ NEW FILE RESET ═══════════════
+
+        newFileBtn.addEventListener('click', async () => {
+            // Clean up all viewers
+            for (const viewerId of Object.keys(VIEWER_CONFIGS)) {
+                const el = document.getElementById(viewerId);
+                if (el) {
+                    try { await el.delete(); } catch (_) {}
+                }
+            }
+
+            // Clean up table & worker
+            try { if (masterTable) { await masterTable.delete(); masterTable = null; } } catch (_) {}
+            try { if (worker) { await worker.terminate(); worker = null; } } catch (_) {}
+
+            // Reset filters
+            for (const selectId of Object.keys(FILTER_MAP)) {
+                const sel = document.getElementById(selectId);
+                sel.innerHTML = sel.options[0]?.outerHTML || '';
+            }
+
+            // Reset KPIs
+            document.querySelectorAll('.kpi-value').forEach(el => { el.textContent = '—'; });
+            document.querySelectorAll('.kpi-card').forEach(el => el.classList.add('kpi-loading'));
+
+            // Switch back to Overview tab
+            document.querySelectorAll('.tab-btn')[0].click();
+
+            // Show upload screen
+            dashboardShell.style.display = 'none';
+            uploadScreen.style.display = 'flex';
+            filePicker.value = '';
+            uploadStatus.innerText = '';
+            progressTrack.style.display = 'none';
+            progressFill.style.width = '0%';
+        });
+
+        // ═══════════════ EXPORT CSV ═══════════════
+
+        exportCsvBtn.addEventListener('click', async () => {
+            try {
+                const gridViewer = document.getElementById('main-grid');
+                const view = await gridViewer.getView();
+                if (!view) { alert("No active data view."); return; }
+
+                const csv = await view.to_csv();
+                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `tradevision_export_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            } catch (err) {
+                console.error("Export error:", err);
+                alert("Failed to export CSV data.");
+            }
+        });
+    </script>
+</body>
+
+</html>

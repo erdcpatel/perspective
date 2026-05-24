@@ -8,13 +8,13 @@
     <script src="coi-serviceworker.js"></script>
     <title>Ad-Hoc Analytics Sandbox</title>
 
-    <link rel="preload" href="https://cdn.jsdelivr.net/npm/@finos/perspective@3.4.3/dist/wasm/perspective-server.wasm"
+    <link rel="preload" href="https://cdn.jsdelivr.net/npm/@perspective-dev/client@4.4.1/dist/wasm/perspective-server.wasm"
         as="fetch" type="application/wasm" crossorigin="anonymous" />
     <link rel="preload"
-        href="https://cdn.jsdelivr.net/npm/@finos/perspective-viewer@3.4.3/dist/wasm/perspective-viewer.wasm" as="fetch"
+        href="https://cdn.jsdelivr.net/npm/@perspective-dev/viewer@4.4.1/dist/wasm/perspective-viewer.wasm" as="fetch"
         type="application/wasm" crossorigin="anonymous" />
     <link rel="stylesheet" crossorigin="anonymous"
-        href="https://cdn.jsdelivr.net/npm/@finos/perspective-viewer@3.4.3/dist/css/themes.css" />
+        href="https://cdn.jsdelivr.net/npm/@perspective-dev/viewer@4.4.1/dist/css/themes.css" />
 
     <style>
         * {
@@ -324,11 +324,11 @@
     </style>
 
     <script type="module"
-        src="https://cdn.jsdelivr.net/npm/@finos/perspective-viewer@3.4.3/dist/cdn/perspective-viewer.js"></script>
+        src="https://cdn.jsdelivr.net/npm/@perspective-dev/viewer@4.4.1/dist/cdn/perspective-viewer.js"></script>
     <script type="module"
-        src="https://cdn.jsdelivr.net/npm/@finos/perspective-viewer-datagrid@3.4.3/dist/cdn/perspective-viewer-datagrid.js"></script>
+        src="https://cdn.jsdelivr.net/npm/@perspective-dev/viewer-datagrid@4.4.1/dist/cdn/perspective-viewer-datagrid.js"></script>
     <script type="module"
-        src="https://cdn.jsdelivr.net/npm/@finos/perspective-viewer-d3fc@3.4.3/dist/cdn/perspective-viewer-d3fc.js"></script>
+        src="https://cdn.jsdelivr.net/npm/@perspective-dev/viewer-d3fc@4.4.1/dist/cdn/perspective-viewer-d3fc.js"></script>
 </head>
 
 <body>
@@ -409,11 +409,7 @@
                         <input type="file" id="layout-picker" accept=".json" style="display: none;" />
                     </div>
 
-                    <!-- Data & Chart Utilities -->
-                    <div class="panel-group-container">
-                        <button class="panel-btn success" id="export-data-btn" title="Export active filtered data as CSV">📥 Export Data</button>
-                        <button class="panel-btn primary" id="capture-chart-btn" title="Take PNG snapshot of active chart">📸 Save Chart</button>
-                    </div>
+
                 </div>
             </header>
             <div id="viewer-viewport">
@@ -423,7 +419,7 @@
     </div>
 
     <script type="module">
-        import perspective from "https://cdn.jsdelivr.net/npm/@finos/perspective@3.4.3/dist/cdn/perspective.js";
+        import perspective from "https://cdn.jsdelivr.net/npm/@perspective-dev/client@4.4.1/dist/cdn/perspective.js";
 
         const dropZone = document.getElementById('drop-zone');
         const filePicker = document.getElementById('file-picker');
@@ -443,8 +439,6 @@
         const exportLayoutBtn = document.getElementById('export-layout-btn');
         const importLayoutBtn = document.getElementById('import-layout-btn');
         const layoutPicker = document.getElementById('layout-picker');
-        const exportDataBtn = document.getElementById('export-data-btn');
-        const captureChartBtn = document.getElementById('capture-chart-btn');
 
         // Module Global Variables
         let activeWorker = null;
@@ -618,312 +612,7 @@
             deleteLayoutBtn.disabled = true;
         });
 
-        // Filtered Clean CSV Export Event
-        exportDataBtn.addEventListener('click', async () => {
-            try {
-                statusMsg.style.display = 'block';
-                statusMsg.innerText = "Querying filtered data view...";
-                
-                const view = await viewer.getView();
-                if (!view) {
-                    alert("No active data view found.");
-                    statusMsg.innerText = "";
-                    return;
-                }
-                
-                statusMsg.innerText = "Formatting dataset to CSV text...";
-                const csvData = await view.to_csv();
-                
-                statusMsg.innerText = "Downloading CSV...";
-                const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `analytics_export_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.csv`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-                
-                statusMsg.innerText = "";
-                flashButtonSuccess(exportDataBtn, "📥 Exported!");
-            } catch (err) {
-                console.error("Failed to export data:", err);
-                alert("Failed to export filtered CSV data.");
-                statusMsg.innerText = "";
-            }
-        });
 
-        // Helper to recursively collect all visible CANVAS, SVG, text-bearing HTML elements, and swatches
-        function collectRenderables(root, list = []) {
-            if (!root) return list;
-            
-            const tag = root.tagName;
-            if (tag === 'STYLE' || tag === 'SCRIPT' || tag === 'TEMPLATE') return list;
-            
-            if (root instanceof HTMLElement || root instanceof SVGElement) {
-                const rect = root.getBoundingClientRect();
-                if (rect.width === 0 || rect.height === 0) {
-                    return list; // Skip invisible elements and their subtrees
-                }
-                
-                // Canvas and SVG elements are captured directly
-                if (tag === 'CANVAS' || tag === 'svg' || tag === 'SVG') {
-                    list.push(root);
-                    if (tag === 'svg' || tag === 'SVG') {
-                        return list; // Don't recurse into SVG children, SVG rendering handles it all
-                    }
-                } else {
-                    const style = window.getComputedStyle(root);
-                    if (style.display !== 'none' && style.visibility !== 'hidden' && parseFloat(style.opacity) !== 0) {
-                        // Extract direct text content
-                        const directText = Array.from(root.childNodes)
-                            .filter(node => node.nodeType === Node.TEXT_NODE)
-                            .map(node => node.textContent.trim())
-                            .join("");
-                        
-                        const hasText = directText.length > 0;
-                        const bgColor = style.backgroundColor;
-                        const hasBg = bgColor && bgColor !== 'transparent' && bgColor !== 'rgba(0, 0, 0, 0)';
-                        
-                        if (hasText || (hasBg && rect.width < 100 && rect.height < 100)) {
-                            list.push(root);
-                        }
-                    }
-                }
-            }
-            
-            const children = root.children || [];
-            for (const child of children) {
-                collectRenderables(child, list);
-            }
-            
-            if (root.shadowRoot) {
-                collectRenderables(root.shadowRoot, list);
-            }
-            
-            return list;
-        }
-
-        // Helper to draw a rounded rectangle on a canvas context
-        function drawRoundedRect(ctx, x, y, w, h, r) {
-            if (w < 2 * r) r = w / 2;
-            if (h < 2 * r) r = h / 2;
-            ctx.beginPath();
-            ctx.moveTo(x + r, y);
-            ctx.arcTo(x + w, y, x + w, y + h, r);
-            ctx.arcTo(x + w, y + h, x, y + h, r);
-            ctx.arcTo(x, y + h, x, y, r);
-            ctx.arcTo(x, y, x + w, y, r);
-            ctx.closePath();
-        }
-
-        // Helper to clone SVG and inline computed styles so they render correctly in standalone context
-        function cloneSvgWithComputedStyles(sourceSvg, w, h) {
-            const clonedSvg = sourceSvg.cloneNode(true);
-            clonedSvg.setAttribute("width", w);
-            clonedSvg.setAttribute("height", h);
-            clonedSvg.setAttribute("viewBox", `0 0 ${w} ${h}`);
-            
-            // Inline computed styles for the SVG element itself
-            const svgStyle = window.getComputedStyle(sourceSvg);
-            clonedSvg.style.fontFamily = svgStyle.fontFamily;
-            clonedSvg.style.fontSize = svgStyle.fontSize;
-            clonedSvg.style.fill = svgStyle.fill;
-            clonedSvg.style.stroke = svgStyle.stroke;
-
-            // Recurse through all elements to copy computed styles
-            const sourceElements = sourceSvg.querySelectorAll('*');
-            const targetElements = clonedSvg.querySelectorAll('*');
-            
-            for (let i = 0; i < sourceElements.length; i++) {
-                const src = sourceElements[i];
-                const dst = targetElements[i];
-                if (!src || !dst) continue;
-                
-                const style = window.getComputedStyle(src);
-                
-                // Copy presentation properties from computed style to inline style
-                const propertiesToCopy = [
-                    'fill', 'stroke', 'stroke-width', 'opacity', 'fill-opacity', 'stroke-opacity',
-                    'font-family', 'font-size', 'font-weight', 'font-style', 'text-anchor', 'dominant-baseline'
-                ];
-                
-                for (const prop of propertiesToCopy) {
-                    const val = style[prop];
-                    if (val) {
-                        dst.style[prop] = val;
-                    }
-                }
-            }
-            
-            return clonedSvg;
-        }
-
-        // Helper to draw an SVG element onto a canvas context asynchronously
-        function drawSvgOnCanvas(svg, ctx, x, y, w, h) {
-            return new Promise((resolve) => {
-                try {
-                    const clonedSvg = cloneSvgWithComputedStyles(svg, w, h);
-                    if (!clonedSvg.getAttribute("xmlns")) {
-                        clonedSvg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-                    }
-                    
-                    const serializer = new XMLSerializer();
-                    let svgString = serializer.serializeToString(clonedSvg);
-                    
-                    // Inject basic style rules to ensure text/labels are styled correctly in dark theme
-                    if (!svgString.includes("<style>")) {
-                        const styleInject = `<style>
-                            text { fill: #e0e0e0 !important; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important; font-size: 10px !important; }
-                            path.domain, line { stroke: #444444 !important; }
-                        </style>`;
-                        svgString = svgString.replace(/<svg([^>]*)>/, `<svg$1>${styleInject}`);
-                    }
-                    
-                    const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
-                    const url = URL.createObjectURL(svgBlob);
-                    
-                    const img = new Image();
-                    img.onload = () => {
-                        ctx.drawImage(img, x, y, w, h);
-                        URL.revokeObjectURL(url);
-                        resolve();
-                    };
-                    img.onerror = (e) => {
-                        console.error("SVG image load error:", e);
-                        URL.revokeObjectURL(url);
-                        resolve();
-                    };
-                    img.src = url;
-                } catch (e) {
-                    console.error("Error rendering SVG:", e);
-                    resolve();
-                }
-            });
-        }
-
-        // Shadow DOM Active Chart PNG Capturer Event
-        captureChartBtn.addEventListener('click', async () => {
-            try {
-                // Retrieve the active plugin instance directly using the official, stable Perspective JS API!
-                const activePlugin = await viewer.getPlugin();
-                
-                if (activePlugin && activePlugin.tagName.toLowerCase().startsWith('perspective-viewer-d3fc-')) {
-                    statusMsg.style.display = 'block';
-                    statusMsg.innerText = "Composing high-resolution chart...";
-                    
-                    const parentRect = activePlugin.getBoundingClientRect();
-                    const compositeCanvas = document.createElement('canvas');
-                    
-                    // Account for device pixel ratio for crisp Retina screenshots!
-                    const dpr = window.devicePixelRatio || 1;
-                    compositeCanvas.width = parentRect.width * dpr;
-                    compositeCanvas.height = parentRect.height * dpr;
-                    
-                    const ctx = compositeCanvas.getContext('2d');
-                    ctx.scale(dpr, dpr);
-                    
-                    // Fill background with dark theme background color
-                    ctx.fillStyle = '#111111';
-                    ctx.fillRect(0, 0, parentRect.width, parentRect.height);
-                    
-                    // Recursively collect all canvas, SVG, and visible HTML renderable nodes from the plugin's shadow root
-                    const renderables = collectRenderables(activePlugin.shadowRoot);
-                    
-                    const drawPromises = [];
-                    
-                    for (const el of renderables) {
-                        const rect = el.getBoundingClientRect();
-                        const x = rect.left - parentRect.left;
-                        const y = rect.top - parentRect.top;
-                        const w = rect.width;
-                        const h = rect.height;
-                        
-                        if (w === 0 || h === 0) continue;
-                        
-                        if (el.tagName === 'CANVAS') {
-                            ctx.drawImage(el, x, y, w, h);
-                        } else if (el.tagName === 'svg' || el.tagName === 'SVG') {
-                            drawPromises.push(drawSvgOnCanvas(el, ctx, x, y, w, h));
-                        } else {
-                            // HTML element (Text or Swatch)
-                            const style = window.getComputedStyle(el);
-                            const directText = Array.from(el.childNodes)
-                                .filter(node => node.nodeType === Node.TEXT_NODE)
-                                .map(node => node.textContent.trim())
-                                .join("");
-                            
-                            if (directText.length > 0) {
-                                const font = `${style.fontStyle || 'normal'} normal ${style.fontWeight || 'normal'} ${style.fontSize || '12px'} ${style.fontFamily || 'sans-serif'}`;
-                                const color = style.color || '#e0e0e0';
-                                const transform = style.transform;
-                                
-                                ctx.save();
-                                // Translate to center of element bounding box
-                                ctx.translate(x + w / 2, y + h / 2);
-                                
-                                if (transform && transform !== 'none') {
-                                    const match = transform.match(/^matrix\((.+)\)$/);
-                                    if (match) {
-                                        const parts = match[1].split(',').map(Number);
-                                        if (parts.length === 6) {
-                                            const [a, b, c, d] = parts;
-                                            ctx.transform(a, b, c, d, 0, 0);
-                                        }
-                                    }
-                                }
-                                
-                                ctx.font = font;
-                                ctx.fillStyle = color;
-                                ctx.textAlign = 'center';
-                                ctx.textBaseline = 'middle';
-                                ctx.fillText(directText, 0, 0);
-                                ctx.restore();
-                            } else {
-                                // Draw color swatch
-                                const bgColor = style.backgroundColor;
-                                if (bgColor && bgColor !== 'transparent' && bgColor !== 'rgba(0, 0, 0, 0)') {
-                                    const borderRadius = parseFloat(style.borderRadius) || 0;
-                                    ctx.save();
-                                    ctx.fillStyle = bgColor;
-                                    if (borderRadius > 0) {
-                                        drawRoundedRect(ctx, x, y, w, h, borderRadius);
-                                        ctx.fill();
-                                    } else {
-                                        ctx.fillRect(x, y, w, h);
-                                    }
-                                    ctx.restore();
-                                }
-                            }
-                        }
-                    }
-                    
-                    // Wait for all SVG layers (X-axis, Y-axis, labels) to finish drawing
-                    await Promise.all(drawPromises);
-                    
-                    // Trigger PNG download
-                    const dataUrl = compositeCanvas.toDataURL("image/png");
-                    const a = document.createElement('a');
-                    a.href = dataUrl;
-                    a.download = `chart_snapshot_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.png`;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    
-                    statusMsg.innerText = "";
-                    flashButtonSuccess(captureChartBtn, "📸 Captured!");
-                    return;
-                }
-                
-                // Fallback / Alert if in Datagrid spreadsheet view
-                alert("Snapshots are supported for chart views.\n\nTo save spreadsheet data, please use the 'Export Data' button.");
-            } catch (err) {
-                console.error("Failed to compose chart:", err);
-                alert("Failed to capture chart snapshot.");
-                statusMsg.innerText = "";
-            }
-        });
 
         async function processCSV(file) {
             try {
